@@ -1,1 +1,6 @@
 requirements.txt
+flask
+gunicorn
+pandas
+numpy
+requests
