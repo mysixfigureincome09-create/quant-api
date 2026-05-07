@@ -41,58 +41,78 @@ def status():
 # =========================================
 @app.route("/dashboard")
 def dashboard():
+
     return """
     <html>
+
     <head>
         <title>Quant Dashboard</title>
+
         <style>
+
             body {
-                background-color: #111;
-                color: #00ff99;
+                background-color: #0f1117;
+                color: white;
                 font-family: Arial;
                 padding: 40px;
             }
 
+            .card {
+                background: #1c1f26;
+                padding: 25px;
+                border-radius: 12px;
+                margin-bottom: 20px;
+            }
+
             h1 {
-                color: white;
+                color: #00ff99;
             }
 
             a {
                 color: #00ff99;
                 text-decoration: none;
-                font-size: 20px;
+                font-size: 18px;
             }
 
-            .box {
-                background: #1c1c1c;
-                padding: 20px;
-                border-radius: 10px;
-                margin-top: 20px;
+            li {
+                margin-bottom: 10px;
             }
+
         </style>
     </head>
 
     <body>
+
         <h1>Quant Dashboard</h1>
 
-        <div class="box">
-            <p>API Status: ONLINE</p>
+        <div class="card">
+            <h2>API Status</h2>
+            <p>ONLINE</p>
+        </div>
 
-            <p>Test Endpoints:</p>
+        <div class="card">
+            <h2>Stock Endpoints</h2>
 
             <ul>
-                <li><a href="/price/AAPL">AAPL Price</a></li>
+                <li><a href="/price/AAPL">AAPL Live Price</a></li>
                 <li><a href="/analyze/AAPL">Analyze AAPL</a></li>
-                <li><a href="/price/TSLA">TSLA Price</a></li>
+
+                <li><a href="/price/TSLA">TSLA Live Price</a></li>
                 <li><a href="/analyze/TSLA">Analyze TSLA</a></li>
+
+                <li><a href="/price/NVDA">NVDA Live Price</a></li>
+                <li><a href="/analyze/NVDA">Analyze NVDA</a></li>
             </ul>
+
         </div>
+
     </body>
+
     </html>
     """
 
 # =========================================
-# LIVE PRICE ROUTE
+# LIVE STOCK PRICE
 # =========================================
 @app.route("/price/<symbol>")
 def price(symbol):
@@ -100,45 +120,42 @@ def price(symbol):
     symbol = symbol.upper()
 
     params = {
-        "function": "TIME_SERIES_INTRADAY",
+        "function": "GLOBAL_QUOTE",
         "symbol": symbol,
-        "interval": "5min",
         "apikey": API_KEY
     }
 
     try:
+
         response = requests.get(BASE_URL, params=params)
         data = response.json()
 
-        # Debug logging
         print(data)
 
-        if "Time Series (5min)" not in data:
+        if "Global Quote" not in data:
             return jsonify({
                 "error": "Stock data unavailable",
                 "details": data
             }), 500
 
-        ts = data["Time Series (5min)"]
-
-        latest_time = list(ts.keys())[0]
-
-        latest_price = ts[latest_time]["4. close"]
+        quote = data["Global Quote"]
 
         return jsonify({
-            "symbol": symbol,
-            "price": latest_price,
-            "time": latest_time
+            "symbol": quote.get("01. symbol"),
+            "price": quote.get("05. price"),
+            "change": quote.get("09. change"),
+            "percent_change": quote.get("10. change percent")
         })
 
     except Exception as e:
+
         return jsonify({
             "error": "data fetch failed",
             "details": str(e)
         }), 500
 
 # =========================================
-# ANALYSIS ROUTE
+# STOCK ANALYSIS
 # =========================================
 @app.route("/analyze/<symbol>")
 def analyze(symbol):
@@ -152,6 +169,7 @@ def analyze(symbol):
     }
 
     try:
+
         response = requests.get(BASE_URL, params=params)
         data = response.json()
 
@@ -159,7 +177,7 @@ def analyze(symbol):
 
         if "Time Series (Daily)" not in data:
             return jsonify({
-                "error": "Analysis data unavailable",
+                "error": "Analysis unavailable",
                 "details": data
             }), 500
 
@@ -194,6 +212,7 @@ def analyze(symbol):
         })
 
     except Exception as e:
+
         return jsonify({
             "error": "analysis failed",
             "details": str(e)
@@ -203,5 +222,10 @@ def analyze(symbol):
 # LOCAL RUN
 # =========================================
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
