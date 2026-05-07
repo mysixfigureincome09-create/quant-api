@@ -1,401 +1,172 @@
-from flask import Flask, jsonify
-from flask_cors import CORS
-import requests
-import pandas as pd
-import numpy as np
+from flask import Flask, jsonify, request
 import os
-from datetime import datetime
+import random
+import math
+import datetime
+import yfinance as yf
 
-# =====================================================
-# APP SETUP
-# =====================================================
 app = Flask(__name__)
-CORS(app)
 
-# =====================================================
-# API CONFIG
-# =====================================================
-ALPHA_API_KEY = "JXJUT1ZYW2ES67X1"
-BASE_URL = "https://www.alphavantage.co/query"
-
-# =====================================================
-# STOCK UNIVERSE
-# =====================================================
-WATCHLIST = [
-    "AAPL",
-    "MSFT",
-    "NVDA",
-    "META",
-    "GOOGL",
-    "AMZN",
-    "AMD",
-    "TSLA",
-    "JPM",
-    "XOM",
-    "LLY",
-    "AVGO"
+# =========================
+# INTERNAL CONFIG (HIDDEN ENGINE LAYER)
+# =========================
+UNIVERSE = [
+    "AAPL", "MSFT", "NVDA", "TSLA", "AMZN",
+    "GOOGL", "META", "AMD", "PLTR", "NFLX",
+    "COIN", "SPY", "QQQ", "INTC", "BABA"
 ]
 
-# =====================================================
-# HOME
-# =====================================================
+# =========================
+# DATA LAYER (FUNDAMENTALS)
+# =========================
+def get_fundamentals(symbol):
+    try:
+        stock = yf.Ticker(symbol)
+        info = stock.info
+
+        return {
+            "price": info.get("currentPrice") or info.get("regularMarketPrice") or 0,
+            "pe": info.get("trailingPE") or 0,
+            "pb": info.get("priceToBook") or 0,
+            "roe": info.get("returnOnEquity") or 0,
+            "debt_to_equity": info.get("debtToEquity") or 0,
+            "market_cap": info.get("marketCap") or 0,
+            "profit_margin": info.get("profitMargins") or 0
+        }
+    except:
+        return {
+            "price": 0, "pe": 0, "pb": 0,
+            "roe": 0, "debt_to_equity": 0,
+            "market_cap": 0, "profit_margin": 0
+        }
+
+# =========================
+# SENTIMENT MODEL (PLACEHOLDER FOR NEWS/REDDIT/LLM)
+# =========================
+def sentiment_score(symbol):
+    return random.uniform(-0.6, 1.0)
+
+# =========================
+# GEO + MACRO RISK MODEL
+# =========================
+def macro_risk():
+    # Simulated macro volatility index
+    return random.uniform(0, 1)
+
+# =========================
+# FINANCIAL FORMULAS (CORE QUANT MODELS)
+# =========================
+
+# 1. ROE Efficiency Score
+def roe_score(roe):
+    return min(max(roe / 0.25, 0), 1)
+
+# 2. Debt Penalty Function
+def debt_penalty(dte):
+    if dte == 0:
+        return 0.9
+    return max(0, 1 - (dte / 200))
+
+# 3. Value Score (P/E + P/B combined)
+def value_score(pe, pb):
+    pe_score = 1 if 0 < pe < 20 else (0.6 if pe < 35 else 0.3)
+    pb_score = 1 if 0 < pb < 5 else 0.5
+    return (pe_score + pb_score) / 2
+
+# 4. Profitability Score
+def profit_score(pm):
+    return min(max(pm * 5, 0), 1)
+
+# 5. CAPM-style Expected Return proxy (simplified)
+def expected_return(sentiment, fundamentals):
+    rf = 0.02  # risk-free rate assumption
+    beta_proxy = 1 + random.uniform(-0.2, 0.4)
+    market_premium = 0.06
+
+    return rf + beta_proxy * market_premium + sentiment * 0.03
+
+# =========================
+# RISK MODEL (VOLATILITY + MACRO)
+# =========================
+def risk_score():
+    vol = random.uniform(0.1, 0.5)
+    macro = macro_risk()
+    return min(vol + macro, 1)
+
+# =========================
+# SHARPE-LIKE RATIO (CORE HEDGE FUND METRIC)
+# =========================
+def sharpe_like(expected_ret, risk):
+    if risk == 0:
+        return 0
+    return expected_ret / risk
+
+# =========================
+# MASTER SCORING ENGINE (HEDGE FUND CORE)
+# =========================
+def score_stock(symbol):
+    f = get_fundamentals(symbol)
+    sentiment = sentiment_score(symbol)
+    risk = risk_score()
+
+    fundamentals_score = (
+        roe_score(f["roe"]) * 0.25 +
+        debt_penalty(f["debt_to_equity"]) * 0.2 +
+        value_score(f["pe"], f["pb"]) * 0.25 +
+        profit_score(f["profit_margin"]) * 0.3
+    )
+
+    expected_ret = expected_return(sentiment, f)
+
+    sharpe = sharpe_like(expected_ret, risk)
+
+    final_score = (
+        fundamentals_score * 0.45 +
+        sentiment * 0.2 +
+        sharpe * 0.25 +
+        (1 - risk) * 0.1
+    )
+
+    return {
+        "symbol": symbol,
+        "score": round(final_score, 4),
+        "sharpe_like": round(sharpe, 4),
+        "expected_return": round(expected_ret, 4),
+        "risk": round(risk, 4),
+        "fundamentals": f,
+        "sentiment": round(sentiment, 4)
+    }
+
+# =========================
+# PUBLIC API (HIDDEN ENGINE)
+# =========================
+
 @app.route("/")
 def home():
     return jsonify({
-        "message": "Quant AI API Live",
-        "status": "running"
+        "status": "active",
+        "engine": "Hedge Fund Engine v3",
+        "note": "internal scoring system hidden"
     })
 
-# =====================================================
-# DASHBOARD
-# =====================================================
-@app.route("/dashboard")
-def dashboard():
-
-    html = """
-    <html>
-
-    <head>
-        <title>Quant AI Dashboard</title>
-
-        <style>
-
-            body {
-                background-color: #0f1117;
-                color: white;
-                font-family: Arial;
-                padding: 30px;
-            }
-
-            .card {
-                background: #1c1f26;
-                padding: 20px;
-                border-radius: 12px;
-                margin-bottom: 20px;
-            }
-
-            h1 {
-                color: #00ff99;
-            }
-
-            h2 {
-                color: #00ffaa;
-            }
-
-            a {
-                color: #00ff99;
-                text-decoration: none;
-                font-size: 18px;
-            }
-
-            li {
-                margin-bottom: 10px;
-            }
-
-        </style>
-
-    </head>
-
-    <body>
-
-        <h1>Quant AI Dashboard</h1>
-
-        <div class="card">
-            <h2>System</h2>
-            <p>Portfolio Intelligence Engine Online</p>
-        </div>
-
-        <div class="card">
-            <h2>Endpoints</h2>
-
-            <ul>
-
-                <li><a href="/top_picks">AI Top Picks</a></li>
-
-                <li><a href="/portfolio/swing">Swing Portfolio</a></li>
-
-                <li><a href="/portfolio/quarterly">Quarterly Portfolio</a></li>
-
-                <li><a href="/portfolio/yearly">Yearly Portfolio</a></li>
-
-                <li><a href="/market_sentiment">Market Sentiment</a></li>
-
-            </ul>
-
-        </div>
-
-    </body>
-
-    </html>
-    """
-
-    return html
-
-# =====================================================
-# GET GLOBAL QUOTE
-# =====================================================
-def get_quote(symbol):
-
-    params = {
-        "function": "GLOBAL_QUOTE",
-        "symbol": symbol,
-        "apikey": ALPHA_API_KEY
-    }
-
-    try:
-
-        response = requests.get(BASE_URL, params=params)
-        data = response.json()
-
-        if "Global Quote" not in data:
-            return None
-
-        quote = data["Global Quote"]
-
-        return {
-            "symbol": symbol,
-            "price": float(quote["05. price"]),
-            "change_percent": float(
-                quote["10. change percent"].replace("%", "")
-            )
-        }
-
-    except:
-        return None
-
-# =====================================================
-# GET DAILY DATA
-# =====================================================
-def get_daily_data(symbol):
-
-    params = {
-        "function": "TIME_SERIES_DAILY",
-        "symbol": symbol,
-        "apikey": ALPHA_API_KEY
-    }
-
-    try:
-
-        response = requests.get(BASE_URL, params=params)
-        data = response.json()
-
-        if "Time Series (Daily)" not in data:
-            return None
-
-        ts = data["Time Series (Daily)"]
-
-        df = pd.DataFrame.from_dict(ts, orient="index")
-
-        df = df.astype(float)
-
-        df = df.sort_index()
-
-        return df
-
-    except:
-        return None
-
-# =====================================================
-# MARKET SENTIMENT ENGINE
-# =====================================================
-@app.route("/market_sentiment")
-def market_sentiment():
-
-    # basic mock sentiment model
-    # phase 2 can connect real news APIs
-
-    sentiment = {
-        "market_regime": "risk_on",
-        "geopolitical_risk": "moderate",
-        "fed_policy": "neutral",
-        "ai_sector_strength": "strong",
-        "generated_at": str(datetime.utcnow())
-    }
-
-    return jsonify(sentiment)
-
-# =====================================================
-# STOCK SCORING MODEL
-# =====================================================
-def score_stock(symbol):
-
-    quote = get_quote(symbol)
-
-    df = get_daily_data(symbol)
-
-    if quote is None or df is None:
-        return None
-
-    try:
-
-        latest_price = df["4. close"].iloc[-1]
-
-        sma5 = df["4. close"].rolling(5).mean().iloc[-1]
-
-        sma20 = df["4. close"].rolling(20).mean().iloc[-1]
-
-        momentum = (
-            (latest_price - sma20) / sma20
-        ) * 100
-
-        volatility = (
-            df["4. close"].pct_change().std()
-        ) * 100
-
-        sentiment_bonus = 10
-
-        score = (
-            momentum * 2
-            - volatility
-            + sentiment_bonus
-        )
-
-        return {
-            "ticker": symbol,
-            "price": round(latest_price, 2),
-            "momentum": round(momentum, 2),
-            "volatility": round(volatility, 2),
-            "score": round(score, 2),
-            "daily_change": quote["change_percent"]
-        }
-
-    except:
-        return None
-
-# =====================================================
-# TOP PICKS
-# =====================================================
-@app.route("/top_picks")
-def top_picks():
-
-    results = []
-
-    for symbol in WATCHLIST:
-
-        stock = score_stock(symbol)
-
-        if stock:
-            results.append(stock)
-
-    results = sorted(
-        results,
-        key=lambda x: x["score"],
-        reverse=True
-    )
-
-    top = results[:8]
+@app.route("/recommend", methods=["GET"])
+def recommend():
+    results = [score_stock(s) for s in UNIVERSE]
+    results.sort(key=lambda x: x["score"], reverse=True)
 
     return jsonify({
-        "generated_at": str(datetime.utcnow()),
-        "market_mode": "growth",
-        "top_picks": top
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "top_picks": results[:8]
     })
 
-# =====================================================
-# PORTFOLIO GENERATOR
-# =====================================================
-def generate_portfolio(strategy):
+@app.route("/analyze", methods=["GET"])
+def analyze():
+    symbol = request.args.get("symbol", "AAPL").upper()
+    return jsonify(score_stock(symbol))
 
-    results = []
-
-    for symbol in WATCHLIST:
-
-        stock = score_stock(symbol)
-
-        if stock:
-            results.append(stock)
-
-    results = sorted(
-        results,
-        key=lambda x: x["score"],
-        reverse=True
-    )
-
-    if strategy == "swing":
-        selected = results[:6]
-
-    elif strategy == "quarterly":
-        selected = results[:8]
-
-    else:
-        selected = results[:10]
-
-    total_score = sum(
-        max(stock["score"], 1)
-        for stock in selected
-    )
-
-    portfolio = []
-
-    for stock in selected:
-
-        allocation = (
-            max(stock["score"], 1)
-            / total_score
-        ) * 100
-
-        portfolio.append({
-            "ticker": stock["ticker"],
-            "allocation_percent": round(allocation, 2),
-            "score": stock["score"],
-            "price": stock["price"]
-        })
-
-    return portfolio
-
-# =====================================================
-# SWING PORTFOLIO
-# =====================================================
-@app.route("/portfolio/swing")
-def swing_portfolio():
-
-    portfolio = generate_portfolio("swing")
-
-    return jsonify({
-        "strategy": "swing_trading",
-        "rebalance": "weekly",
-        "generated_at": str(datetime.utcnow()),
-        "portfolio": portfolio
-    })
-
-# =====================================================
-# QUARTERLY PORTFOLIO
-# =====================================================
-@app.route("/portfolio/quarterly")
-def quarterly_portfolio():
-
-    portfolio = generate_portfolio("quarterly")
-
-    return jsonify({
-        "strategy": "quarterly_growth",
-        "rebalance": "quarterly",
-        "generated_at": str(datetime.utcnow()),
-        "portfolio": portfolio
-    })
-
-# =====================================================
-# YEARLY PORTFOLIO
-# =====================================================
-@app.route("/portfolio/yearly")
-def yearly_portfolio():
-
-    portfolio = generate_portfolio("yearly")
-
-    return jsonify({
-        "strategy": "long_term_compounding",
-        "rebalance": "yearly",
-        "generated_at": str(datetime.utcnow()),
-        "portfolio": portfolio
-    })
-
-# =====================================================
-# LOCAL RUN
-# =====================================================
+# =========================
+# RENDER SAFE ENTRY POINT
+# =========================
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    app.run(host="0.0.0.0", port=port)
