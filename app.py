@@ -11,7 +11,7 @@ CORS(app)
 # =========================
 # CONFIG
 # =========================
-API_KEY = "YOUR_ALPHA_VANTAGE_KEY"
+API_KEY = "JXJUT1ZYW2ES67X1"
 BASE_URL = "https://www.alphavantage.co/query"
 
 # simple in-memory cache
