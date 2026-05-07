@@ -1,4 +1,6 @@
 flask
 gunicorn
-yfinance
 requests
+pandas
+numpy
+flask-cors
