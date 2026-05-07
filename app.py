@@ -1,78 +1,123 @@
-from flask import Flask, jsonify, request
-import yfinance as yf
+from flask import Flask, jsonify
+import requests
+import os
 import pandas as pd
 import numpy as np
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 # =========================
-# HOME ROUTE
+# CONFIG
+# =========================
+API_KEY = "YOUR_ALPHA_VANTAGE_KEY"
+BASE_URL = "https://www.alphavantage.co/query"
+
+# simple in-memory cache
+cache = {}
+
+# =========================
+# HEALTH CHECK
 # =========================
 @app.route("/")
 def home():
+    return jsonify({"message": "Quant API is live", "status": "running"})
+
+
+@app.route("/status")
+def status():
     return jsonify({
-        "status": "running",
-        "message": "Quant API is live"
+        "status": "ok",
+        "cache_size": len(cache)
     })
 
 # =========================
-# STOCK ANALYSIS ROUTE
+# LIVE PRICE
 # =========================
-@app.route("/analyze", methods=["GET"])
-def analyze():
+@app.route("/price/<symbol>")
+def price(symbol):
+    symbol = symbol.upper()
 
-    ticker = request.args.get("ticker", "").upper()
+    if symbol in cache:
+        return jsonify(cache[symbol])
 
-    if not ticker:
-        return jsonify({
-            "error": "Ticker required"
-        }), 400
+    params = {
+        "function": "TIME_SERIES_INTRADAY",
+        "symbol": symbol,
+        "interval": "5min",
+        "apikey": API_KEY
+    }
+
+    r = requests.get(BASE_URL, params=params)
+    data = r.json()
 
     try:
-        stock = yf.Ticker(ticker)
+        timeseries = data["Time Series (5min)"]
+        latest_time = list(timeseries.keys())[0]
+        price = float(timeseries[latest_time]["4. close"])
 
-        hist = stock.history(period="3mo")
+        result = {
+            "symbol": symbol,
+            "price": price,
+            "time": latest_time
+        }
 
-        if hist.empty:
-            return jsonify({
-                "error": "Invalid ticker"
-            }), 404
+        cache[symbol] = result
+        return jsonify(result)
 
-        close = hist["Close"]
+    except Exception as e:
+        return jsonify({"error": "data fetch failed", "details": str(e)}), 500
 
-        sma20 = close.rolling(20).mean().iloc[-1]
-        sma50 = close.rolling(50).mean().iloc[-1]
-        current = close.iloc[-1]
 
-        change = ((current - close.iloc[-2]) / close.iloc[-2]) * 100
+# =========================
+# SIMPLE TRADING SIGNAL
+# =========================
+@app.route("/analyze/<symbol>")
+def analyze(symbol):
+    symbol = symbol.upper()
+
+    params = {
+        "function": "TIME_SERIES_DAILY",
+        "symbol": symbol,
+        "apikey": API_KEY
+    }
+
+    r = requests.get(BASE_URL, params=params)
+    data = r.json()
+
+    try:
+        ts = data["Time Series (Daily)"]
+
+        df = pd.DataFrame.from_dict(ts, orient="index")
+        df = df.astype(float)
+        df = df.sort_index()
+
+        df["SMA_5"] = df["4. close"].rolling(5).mean()
+        df["SMA_20"] = df["4. close"].rolling(20).mean()
+
+        latest = df.iloc[-1]
 
         signal = "HOLD"
 
-        if current > sma20 > sma50:
+        if latest["SMA_5"] > latest["SMA_20"]:
             signal = "BUY"
-
-        elif current < sma20 < sma50:
+        elif latest["SMA_5"] < latest["SMA_20"]:
             signal = "SELL"
 
         return jsonify({
-            "ticker": ticker,
-            "current_price": round(float(current), 2),
-            "daily_change_percent": round(float(change), 2),
-            "sma20": round(float(sma20), 2),
-            "sma50": round(float(sma50), 2),
+            "symbol": symbol,
+            "price": latest["4. close"],
             "signal": signal
         })
 
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 500
+        return jsonify({"error": "analysis failed", "details": str(e)}), 500
 
 
 # =========================
-# RENDER START
+# RUN (LOCAL ONLY)
 # =========================
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
