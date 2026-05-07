@@ -1,6 +1,6 @@
 flask
-flask-cors
-requests
-pandas
+gunicorn
+yfinance
 numpy
-openai
+pandas
+requests
