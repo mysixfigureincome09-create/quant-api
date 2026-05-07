@@ -7,7 +7,26 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+@app.route("/")
 
+@app.route("/")
+def home():
+    return jsonify({"message": "Quant API is live", "status": "running"})
+
+
+# 👇 ADD IT RIGHT HERE (same level as other routes)
+@app.route("/dashboard")
+def dashboard():
+    return """
+    <html>
+        <h1>Quant Dashboard</h1>
+        <p>API Running</p>
+        <ul>
+            <li>/price/AAPL</li>
+            <li>/analyze/AAPL</li>
+        </ul>
+    </html>
+    """
 # =========================
 # CONFIG
 # =========================
