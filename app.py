@@ -13,7 +13,7 @@ CORS(app)
 # =========================================
 # API CONFIG
 # =========================================
-API_KEY = "JXJUT1ZYW2ES67X1"
+API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY")
 BASE_URL = "https://www.alphavantage.co/query"
 
 # =========================================
